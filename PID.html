@@ -1,0 +1,717 @@
+
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explorador Interactivo de Control PID</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutrals & Subtle Accent -->
+    <!-- Application Structure Plan: A thematic, single-page application designed for educational exploration. The structure progresses from fundamental concepts to interactive experimentation, practical application, and advanced topics. A sticky navigation bar allows users to jump between sections, facilitating a non-linear learning path. The core of the app is the interactive PID tuning simulator, which provides a hands-on understanding that static text cannot. This structure was chosen to transform a dense report into an engaging learning tool, prioritizing comprehension and user interaction over a rigid, linear presentation. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Core PID concepts (P, I, D). Goal: Demonstrate individual and combined effects. Viz/Method: Interactive Chart.js line chart with sliders for Kp, Ki, Kd. Interaction: User adjusts gains and sees real-time response changes. Justification: This is the most effective way to teach the intuitive feel of PID tuning.
+        - Report Info: Analog vs. Digital control. Goal: Compare and explain discretization. Viz/Method: A side-by-side text comparison and a Chart.js visualizer. Interaction: User adjusts a "sampling rate" slider to see a continuous signal get converted into a discrete, "stepped" signal. Justification: Visually demonstrates the core concept of sampling far better than text alone.
+        - Report Info: Application in robotics. Goal: Connect theory to a physical example. Viz/Method: Styled HTML/CSS diagrams of a feedback loop and an encoder. Interaction: Subtle animations to show flow and rotation. Justification: Provides a clear, simplified visual metaphor for complex systems.
+        - Library/Method: Chart.js for all charts due to its simplicity and performance. Vanilla JS for all state management and event handling. Tailwind CSS for responsive layout.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FDFBF6;
+            color: #4A4A4A;
+        }
+      .nav-link {
+            transition: color 0.3s ease, border-bottom-color 0.3s ease;
+            border-bottom: 2px solid transparent;
+        }
+      .nav-link:hover,.nav-link.active {
+            color: #C08261;
+            border-bottom-color: #C08261;
+        }
+      .card {
+            background-color: #FFFFFF;
+            border: 1px solid #EAEAEA;
+            border-radius: 0.75rem;
+            box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.08), 0 3px 6px -1px rgba(0, 0, 0, 0.05); /* Enhanced shadow */
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+      .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 20px -4px rgba(0, 0, 0, 0.1), 0 5px 10px -2px rgba(0, 0, 0, 0.08); /* More pronounced hover shadow */
+        }
+      .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 45vh;
+        }
+        @media (min-width: 768px) {
+          .chart-container {
+                height: 400px;
+            }
+        }
+      .slider-track {
+            background: #EAEAEA;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 10px; /* Thicker track */
+            border-radius: 5px;
+            outline: none;
+        }
+      .slider-track::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px; /* Larger thumb */
+            height: 24px; /* Larger thumb */
+            border-radius: 50%;
+            background: #C08261;
+            cursor: pointer;
+            margin-top: -7px; /* Center thumb vertically */
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3); /* Stronger shadow */
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+      .slider-track::-webkit-slider-thumb:hover {
+            background-color: #A96F51;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+        }
+      .slider-track::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #C08261;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+      .slider-track::-moz-range-thumb:hover {
+            background-color: #A96F51;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+        }
+      .tag {
+            background-color: #EFEBE5;
+            color: #C08261;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+        }
+      .btn {
+            background-color: #C08261;
+            color: #FFFFFF;
+            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+      .btn:hover {
+            background-color: #A96F51;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+      .btn:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        /* Articulation Control Diagram */
+      .joint-link {
+            background-color: #6B7280; /* Gray-500 */
+            height: 16px;
+            border-radius: 8px;
+            position: absolute;
+            transform-origin: left center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+      .joint-pivot {
+            background-color: #C08261; /* Accent color */
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px solid #A96F51;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+      .motor-body {
+            background-color: #4A4A4A; /* Dark gray */
+            width: 30px;
+            height: 40px;
+            border-radius: 4px;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+      .motor-shaft {
+            background-color: #9CA3AF; /* Gray-400 */
+            width: 8px;
+            height: 12px;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%) translateY(-20px);
+            border-radius: 2px;
+        }
+      .desired-line,.actual-line {
+            position: absolute;
+            height: 2px;
+            width: 60px;
+            transform-origin: left center;
+            left: 50%;
+            top: 50%;
+            transform: translateY(-50%) rotate(0deg); /* Base rotation */
+        }
+      .desired-line {
+            background-color: #4A4A4A;
+            border-style: dashed;
+            border-width: 0 0 2px 0;
+            border-color: #4A4A4A;
+            opacity: 0.7;
+        }
+      .actual-line {
+            background-color: #C08261;
+            box-shadow: 0 0 8px rgba(192, 130, 97, 0.5);
+        }
+
+        /* Animation for joint rotation */
+        @keyframes jointRotate {
+            0% { transform: translateY(-50%) rotate(-45deg); }
+            50% { transform: translateY(-50%) rotate(45deg); }
+            100% { transform: translateY(-50%) rotate(-45deg); }
+        }
+      .animated-joint-link {
+            animation: jointRotate 4s ease-in-out infinite;
+        }
+
+        /* Encoder signal styling */
+        .square-wave-segment {
+            height: 100%;
+            width: 5%; /* Each segment takes 5% width */
+            float: left; /* Arrange horizontally */
+        }
+        .high-segment {
+            background-color: #C08261;
+        }
+        .low-segment {
+            background-color: #FDFBF6;
+        }
+        .signal-label {
+            position: absolute;
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: #4A4A4A;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            padding: 0 4px;
+            background-color: rgba(255, 255, 255, 0.7);
+            border-radius: 4px;
+            pointer-events: none; /* Allow clicks to pass through */
+        }
+        .signal-label.high { left: 8px; }
+        .signal-label.low { right: 8px; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+        <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex-shrink-0">
+                    <h1 class="text-xl font-bold text-gray-800">Control PID Interactivo</h1>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <a href="#fundamentos" class="nav-link px-3 py-2 rounded-md text-sm font-medium">Fundamentos</a>
+                        <a href="#componentes" class="nav-link px-3 py-2 rounded-md text-sm font-medium">Componentes</a>
+                        <a href="#digital" class="nav-link px-3 py-2 rounded-md text-sm font-medium">Digital vs Analógico</a>
+                        <a href="#robotica" class="nav-link px-3 py-2 rounded-md text-sm font-medium">Robótica</a>
+                        <a href="#sintonizacion" class="nav-link px-3 py-2 rounded-md text-sm font-medium">Sintonización</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+
+        <section id="fundamentos" class="my-12 scroll-mt-20">
+            <h2 class="text-3xl font-bold text-center text-gray-800 mb-4">Fundamentos del Control PID</h2>
+            <p class="text-center max-w-3xl mx-auto text-lg mb-10">
+                Un controlador PID (Proporcional-Integral-Derivativo) es un mecanismo de control por retroalimentación. Su objetivo es simple pero poderoso: calcular la diferencia ("error") entre un valor deseado (Setpoint) y un valor medido, y aplicar una corrección para minimizar ese error. Esta sección visualiza ese ciclo fundamental.
+            </p>
+            <div class="card p-6 md:p-8 flex justify-center items-center">
+                <!-- Image for Feedback Loop Diagram -->
+                <img 
+                    src="https://www.researchgate.net/publication/365883357/figure/fig8/AS:1143878198755330@1660144675549/Figura-9-Diagrama-a-bloques-del-sistema-en-lazo-cerrado-con-un-control-PID.png" 
+                    alt="Diagrama de Lazo Cerrado de Control PID" 
+                    class="max-w-full h-auto rounded-lg shadow-md"
+                    onerror="this.onerror=null; this.src='https://placehold.co/600x300/EAEAEA/4A4A4A?text=Imagen+no+disponible';"
+                >
+            </div>
+            <p class="text-center mt-6 text-gray-600">Este lazo cerrado permite al sistema corregirse continuamente. El controlador ajusta la salida para que coincida con el setpoint, basándose en la retroalimentación constante del sensor.</p>
+        </section>
+
+        <hr class="my-16 border-t border-gray-200">
+
+        <section id="componentes" class="my-12 scroll-mt-20">
+            <h2 class="text-3xl font-bold text-center text-gray-800 mb-4">Deconstruyendo el PID</h2>
+            <p class="text-center max-w-3xl mx-auto text-lg mb-10">
+                La magia del PID reside en la combinación de sus tres componentes. Cada uno aborda el error desde una perspectiva temporal diferente: presente, pasado y futuro. Interactúa con los controles para ver cómo cada término moldea la respuesta del sistema.
+            </p>
+            <div class="card p-6 md:p-8">
+                <div class="chart-container mb-8">
+                    <canvas id="pidChart"></canvas>
+                </div>
+                <div class="grid md:grid-cols-3 gap-6">
+                    <div class="space-y-4">
+                        <label class="font-bold text-lg text-gray-700">P (Proporcional): <span class="tag" id="kpValue">2.0</span></label>
+                        <input id="kpSlider" type="range" min="0" max="10" value="2" step="0.1" class="w-full h-2 rounded-lg appearance-none cursor-pointer slider-track" title="Ajustar ganancia proporcional (Kp)">
+                        <p class="text-sm">Responde al error <strong>actual</strong>. Una ganancia alta (Kp) reacciona con fuerza, pero puede causar inestabilidad.</p>
+                    </div>
+                    <div class="space-y-4">
+                        <label class="font-bold text-lg text-gray-700">I (Integral): <span class="tag" id="kiValue">0.5</span></label>
+                        <input id="kiSlider" type="range" min="0" max="2" value="0.5" step="0.01" class="w-full h-2 rounded-lg appearance-none cursor-pointer slider-track" title="Ajustar ganancia integral (Ki)">
+                        <p class="text-sm">Considera el error <strong>pasado</strong> acumulado. Elimina el error residual (de estado estacionario) pero puede causar sobreimpulso.</p>
+                    </div>
+                    <div class="space-y-4">
+                        <label class="font-bold text-lg text-gray-700">D (Derivativo): <span class="tag" id="kdValue">1.0</span></label>
+                        <input id="kdSlider" type="range" min="0" max="10" value="1" step="0.1" class="w-full h-2 rounded-lg appearance-none cursor-pointer slider-track" title="Ajustar ganancia derivativa (Kd)">
+                        <p class="text-sm">Anticipa el error <strong>futuro</strong> basándose en su tasa de cambio. Amortigua oscilaciones y mejora la estabilidad.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-t border-gray-200">
+
+        <section id="digital" class="my-12 scroll-mt-20">
+            <h2 class="text-3xl font-bold text-center text-gray-800 mb-4">Digital vs. Analógico</h2>
+            <p class="text-center max-w-3xl mx-auto text-lg mb-10">
+                El control digital no ve el mundo de forma continua. Lo "muestrea" a intervalos discretos. Esta sección ilustra cómo la frecuencia de muestreo afecta la fidelidad con la que un sistema digital puede representar una señal analógica del mundo real.
+            </p>
+            <div class="grid md:grid-cols-2 gap-8 items-center">
+                <div class="card p-6 md:p-8">
+                    <h3 class="font-bold text-xl mb-3 text-gray-800">Visualizador de Muestreo</h3>
+                    <div class="chart-container h-64 max-h-[30vh]">
+                        <canvas id="samplingChart"></canvas>
+                    </div>
+                    <div class="mt-6 space-y-2">
+                        <label for="samplingSlider" class="font-medium">Tasa de Muestreo: <span id="samplingValue" class="tag">10</span> Hz</label>
+                        <input id="samplingSlider" type="range" min="2" max="50" value="10" step="1" class="w-full h-2 rounded-lg appearance-none cursor-pointer slider-track">
+                        <p class="text-sm text-gray-600">Ajusta el deslizador. Una tasa baja pierde información; una alta es más fiel pero computacionalmente más costosa.</p>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="card p-6">
+                        <h4 class="font-bold text-lg text-gray-800">PID Analógico</h4>
+                        <p class="mt-2 text-sm">Opera en tiempo continuo usando circuitos electrónicos. Ofrece una respuesta instantánea sin retrasos de cómputo, ideal para aplicaciones de ultra-alta velocidad.</p>
+                    </div>
+                    <div class="card p-6">
+                        <h4 class="font-bold text-lg text-gray-800">PID Digital</h4>
+                        <p class="mt-2 text-sm">Opera en tiempo discreto usando software en un microcontrolador. Es flexible, fácil de sintonizar y permite algoritmos avanzados como el control adaptativo.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-t border-gray-200">
+
+        <section id="robotica" class="my-12 scroll-mt-20">
+            <h2 class="text-3xl font-bold text-center text-gray-800 mb-4">Aplicación en Robótica</h2>
+            <p class="text-center max-w-3xl mx-auto text-lg mb-10">
+                En un brazo robótico, cada articulación es un sistema que necesita ser controlado. El PID es esencial para mover cada articulación a una posición precisa y con una velocidad controlada. La clave es la retroalimentación, a menudo proporcionada por un sensor llamado "encoder".
+            </p>
+            <div class="grid md:grid-cols-2 gap-8 items-start">
+                <div class="card p-6 md:p-8">
+                    <h3 class="font-bold text-xl mb-4 text-gray-800">Control de Articulación</h3>
+                    <p class="mb-6">Un controlador PID calcula el par motor necesario para mover una articulación desde su posición actual a la deseada, asegurando un movimiento suave y preciso.</p>
+                    <div class="relative w-full h-48 bg-gray-100 rounded-lg flex items-center justify-center p-4 overflow-hidden">
+                        <div class="motor-body" style="left: 20%; top: 50%; transform: translate(-50%, -50%);"></div>
+                        <div class="motor-shaft" style="left: 20%; top: 50%; transform: translate(-50%, -50%) translateY(-20px);"></div>
+
+                        <div class="joint-pivot" style="left: 20%; top: 50%;"></div>
+
+                        <div class="joint-link" style="left: calc(20% + 12px); top: 50%; width: 80px; transform: translateY(-50%) rotate(-45deg);"></div>
+                        
+                        <div id="animatedLink" class="joint-link animated-joint-link" style="left: calc(20% + 12px + 80px); top: 50%; width: 80px; transform: translateY(-50%) rotate(-45deg);"></div>
+
+                        <div id="desiredPosLine" class="desired-line" style="transform: translateY(-50%) rotate(45deg);"></div>
+                        <p class="absolute text-sm text-gray-600" style="top: 10%; right: 10%; transform: rotate(45deg);">Posición Deseada</p>
+
+                        <div id="actualPosLine" class="actual-line" style="transform: translateY(-50%) rotate(-45deg);"></div>
+                        <p class="absolute text-sm text-gray-600" style="bottom: 10%; left: 10%; transform: rotate(-45deg);">Posición Actual</p>
+                    </div>
+                </div>
+                <div class="card p-6 md:p-8">
+                    <h3 class="font-bold text-xl mb-4 text-gray-800">Retroalimentación con Encoder</h3>
+                    <p class="mb-6">Un encoder rotativo traduce el giro del motor en señales eléctricas. Al contar los pulsos, el controlador sabe exactamente cuánto ha girado la articulación.</p>
+                     <div class="w-full h-48 bg-gray-100 rounded-lg p-4 relative">
+                        <p class="text-sm font-medium mb-2 text-gray-700">Señal A (CLK):</p>
+                        <div id="encoderSignalA" class="w-full h-12 bg-white rounded flex items-center overflow-hidden relative border border-gray-300">
+                            <span class="signal-label high">HIGH</span>
+                            <span class="signal-label low">LOW</span>
+                        </div>
+                        <p class="text-sm font-medium my-2 text-gray-700">Señal B (DT):</p>
+                        <div id="encoderSignalB" class="w-full h-12 bg-white rounded flex items-center overflow-hidden relative border border-gray-300">
+                            <span class="signal-label high">HIGH</span>
+                            <span class="signal-label low">LOW</span>
+                        </div>
+                        <p class="text-xs text-center mt-4 text-gray-500">La diferencia de fase entre A y B indica la dirección de giro.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <hr class="my-16 border-t border-gray-200">
+        
+        <section id="sintonizacion" class="my-12 scroll-mt-20">
+            <h2 class="text-3xl font-bold text-center text-gray-800 mb-4">El Arte de la Sintonización</h2>
+            <p class="text-center max-w-3xl mx-auto text-lg mb-10">
+                Encontrar los valores de ganancia (Kp, Ki, Kd) perfectos es un arte. Una mala sintonización puede llevar a respuestas lentas, inestables u oscilatorias. Prueba algunas configuraciones predefinidas para ver la diferencia entre una buena y una mala sintonización.
+            </p>
+            <div class="card p-6 md:p-8">
+                <div class="chart-container mb-8">
+                    <canvas id="tuningChart"></canvas>
+                </div>
+                <div class="flex flex-wrap justify-center gap-4">
+                    <button id="tuneSlow" class="btn px-4 py-2 rounded-lg font-medium">Respuesta Lenta (P bajo)</button>
+                    <button id="tuneOscillate" class="btn px-4 py-2 rounded-lg font-medium">Oscilatoria (P/I altos)</button>
+                    <button id="tuneOptimal" class="btn px-4 py-2 rounded-lg font-medium">Respuesta Óptima</button>
+                    <button id="tuneAggressive" class="btn px-4 py-2 rounded-lg font-medium">Agresiva (P alto)</button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-white border-t border-gray-200 mt-16">
+        <div class="container mx-auto py-6 px-4 sm:px-6 lg:px-8 text-center text-gray-500">
+            <p>Aplicación Interactiva de Control PID. Creada para la exploración educativa.</p>
+        </div>
+    </footer>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    let pidChart, samplingChart, tuningChart;
+
+    const kpSlider = document.getElementById('kpSlider');
+    const kiSlider = document.getElementById('kiSlider');
+    const kdSlider = document.getElementById('kdSlider');
+    const kpValue = document.getElementById('kpValue');
+    const kiValue = document.getElementById('kiValue');
+    const kdValue = document.getElementById('kdValue');
+    
+    const samplingSlider = document.getElementById('samplingSlider');
+    const samplingValue = document.getElementById('samplingValue');
+
+    const tuneSlowBtn = document.getElementById('tuneSlow');
+    const tuneOscillateBtn = document.getElementById('tuneOscillate');
+    const tuneOptimalBtn = document.getElementById('tuneOptimal');
+    const tuneAggressiveBtn = document.getElementById('tuneAggressive');
+
+    const actualPosLine = document.getElementById('actualPosLine');
+
+    function simulatePID(kp, ki, kd, setpoint = 1, duration = 100, dt = 0.1) {
+        let pv = 0;
+        let error = 0;
+        let integral = 0;
+        let derivative = 0;
+        let lastError = 0;
+        const response = [];
+        const systemInertia = 0.8; // Represents how much previous velocity affects current
+        let velocity = 0;
+
+        for (let i = 0; i < duration; i++) {
+            error = setpoint - pv;
+            integral += error * dt;
+            derivative = (error - lastError) / dt;
+            
+            let output = kp * error + ki * integral + kd * derivative;
+            
+            // Simple model for system response
+            velocity = (velocity * systemInertia) + (output * (1 - systemInertia));
+            pv += velocity * dt;
+            
+            response.push(pv);
+            lastError = error;
+        }
+        return response;
+    }
+
+    function createPidChart() {
+        const ctx = document.getElementById('pidChart').getContext('2d');
+        const data = {
+            labels: Array.from({ length: 100 }, (_, i) => (i * 0.1).toFixed(1)),
+            datasets: [{
+                label: 'Respuesta del Sistema',
+                data: [],
+                borderColor: '#C08261',
+                backgroundColor: 'rgba(192, 130, 97, 0.1)',
+                fill: true,
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1
+            }, {
+                label: 'Setpoint',
+                data: Array(100).fill(1),
+                borderColor: '#4A4A4A',
+                borderWidth: 2,
+                pointRadius: 0,
+                borderDash: [5, 5]
+            }]
+        };
+        pidChart = new Chart(ctx, {
+            type: 'line',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 1.8,
+                        title: { display: true, text: 'Valor' }
+                    },
+                    x: {
+                        title: { display: true, text: 'Tiempo (s)' }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        enabled: true // Enable tooltips for better interaction
+                    }
+                }
+            }
+        });
+    }
+    
+    function updatePidChart() {
+        const kp = parseFloat(kpSlider.value);
+        const ki = parseFloat(kiSlider.value);
+        const kd = parseFloat(kdSlider.value);
+        
+        kpValue.textContent = kp.toFixed(2);
+        kiValue.textContent = ki.toFixed(2);
+        kdValue.textContent = kd.toFixed(2);
+        
+        const response = simulatePID(kp, ki, kd);
+        pidChart.data.datasets[0].data = response;
+        pidChart.update('none');
+    }
+
+    function createTuningChart() {
+        const ctx = document.getElementById('tuningChart').getContext('2d');
+        const data = {
+            labels: Array.from({ length: 100 }, (_, i) => (i * 0.1).toFixed(1)),
+            datasets: [{
+                label: 'Respuesta del Sistema',
+                data: [],
+                borderColor: '#C08261',
+                backgroundColor: 'rgba(192, 130, 97, 0.1)',
+                fill: true,
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1
+            }, {
+                label: 'Setpoint',
+                data: Array(100).fill(1),
+                borderColor: '#4A4A4A',
+                borderWidth: 2,
+                pointRadius: 0,
+                borderDash: [5, 5]
+            }]
+        };
+        tuningChart = new Chart(ctx, {
+            type: 'line',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                 scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 1.8,
+                        title: { display: true, text: 'Valor' }
+                    },
+                    x: {
+                        title: { display: true, text: 'Tiempo (s)' }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        enabled: true
+                    }
+                }
+            }
+        });
+    }
+
+    function updateTuningChart(kp, ki, kd) {
+        const response = simulatePID(kp, ki, kd);
+        tuningChart.data.datasets[0].data = response;
+        tuningChart.update('none');
+    }
+
+    function createSamplingChart() {
+        const ctx = document.getElementById('samplingChart').getContext('2d');
+        const analogLabels = Array.from({ length: 101 }, (_, i) => i);
+        const analogData = analogLabels.map(x => Math.sin(x * 0.1) * 0.8 + 0.5); // Shifted sine wave for better visualization
+        
+        const data = {
+            labels: analogLabels,
+            datasets: [{
+                label: 'Señal Analógica',
+                data: analogData,
+                borderColor: '#9DB2BF',
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.4,
+                type: 'line'
+            }, {
+                label: 'Señal Digital Muestreada',
+                data: [],
+                backgroundColor: 'rgba(192, 130, 97, 0.7)',
+                borderColor: '#C08261',
+                borderWidth: 2,
+                stepped: true,
+                pointRadius: 3,
+                type: 'line',
+            }]
+        };
+        samplingChart = new Chart(ctx, {
+            type: 'line',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { display: false, min: -0.5, max: 1.5 }, // Adjusted range
+                    x: { display: false }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    }
+
+    function updateSamplingChart() {
+        const rate = parseInt(samplingSlider.value);
+        samplingValue.textContent = rate;
+        
+        const analogData = samplingChart.data.datasets[0].data;
+        const sampledData = [];
+        const totalPoints = analogData.length;
+        // Calculate step based on desired rate, ensuring at least 1 sample per point for max rate
+        const step = totalPoints / rate; 
+
+        for(let i=0; i<totalPoints; i++) {
+             sampledData.push(NaN) // Initialize with NaN to create gaps
+        }
+
+        for (let i = 0; i < totalPoints; i += step) {
+            const index = Math.round(i);
+            if(index < totalPoints) {
+                const value = analogData[index];
+                // Fill the stepped segment
+                for(let j=index; j<Math.round(i+step) && j<totalPoints; j++){
+                    sampledData[j] = value;
+                }
+            }
+        }
+        
+        samplingChart.data.datasets[1].data = sampledData;
+        samplingChart.update('none');
+    }
+
+    function animateEncoder() {
+        const signalA = document.getElementById('encoderSignalA');
+        const signalB = document.getElementById('encoderSignalB');
+        
+        let position = 0;
+        const segmentWidth = 5; // Percentage width of each square wave segment
+        const numSegments = 100 / segmentWidth; // Total segments to fill 100% width
+
+        setInterval(() => {
+            position = (position + 1) % numSegments; // Cycle through segments
+
+            const createSquareWave = (offset) => {
+                let html = '';
+                for (let i = 0; i < numSegments; i++) {
+                    const currentSegment = (i + position + offset) % numSegments;
+                    const isHigh = currentSegment < (numSegments / 2); // Half high, half low
+                    html += `<div class="square-wave-segment ${isHigh? 'high-segment' : 'low-segment'}"></div>`;
+                }
+                return html;
+            };
+
+            signalA.innerHTML = createSquareWave(0);
+            signalB.innerHTML = createSquareWave(numSegments / 4); // 90-degree phase shift
+        }, 100); // Slower animation for clarity
+    }
+
+    // Initializations
+    createPidChart();
+    updatePidChart();
+
+    createTuningChart();
+    updateTuningChart(2.5, 0.8, 1.5); // Optimal as default
+
+    createSamplingChart();
+    updateSamplingChart();
+
+    animateEncoder();
+
+    // Event Listeners
+    kpSlider.addEventListener('input', updatePidChart);
+    kiSlider.addEventListener('input', updatePidChart);
+    kdSlider.addEventListener('input', updatePidChart);
+
+    samplingSlider.addEventListener('input', updateSamplingChart);
+
+    tuneSlowBtn.addEventListener('click', () => updateTuningChart(0.8, 0.1, 0.2));
+    tuneOscillateBtn.addEventListener('click', () => updateTuningChart(5, 1.5, 0.5)); // Adjusted for more clear oscillation
+    tuneOptimalBtn.addEventListener('click', () => updateTuningChart(2.5, 0.8, 1.5));
+    tuneAggressiveBtn.addEventListener('click', () => updateTuningChart(6, 0.5, 2));
+
+    // Nav active state on scroll
+    const sections = document.querySelectorAll('section');
+    const navLinks = document.querySelectorAll('.nav-link');
+    
+    window.addEventListener('scroll', () => {
+        let current = '';
+        sections.forEach(section => {
+            const sectionTop = section.offsetTop;
+            if (pageYOffset >= sectionTop - 80) {
+                current = section.getAttribute('id');
+            }
+        });
+
+        navLinks.forEach(link => {
+            link.classList.remove('active');
+            if (link.getAttribute('href').includes(current)) {
+                link.classList.add('active');
+            }
+        });
+    });
+});
+</script>
+
+</body>
+</html>
